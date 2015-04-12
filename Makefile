@@ -5,7 +5,7 @@ APP_DIR=app
 
 SR_FILES=$(DATA_DIR)/SR2010.xlsx $(DATA_DIR)/SR2011.xlsx $(DATA_DIR)/SR2012.xlsx $(DATA_DIR)/SR2013.xlsx $(DATA_DIR)/SR2014.xlsx $(DATA_DIR)/SR2015.xlsx
 
-all: $(APP_DIR)/fsas.json 
+all: $(APP_DIR)/fsas.json $(APP_DIR)/all.csv
 
 #
 # 311 Service Requests - Customer Initiated
@@ -20,10 +20,6 @@ $(DATA_DIR)/sr.db:
 
 load_db: $(DATA_DIR)/sr.db $(SR_FILES)
 	python load_db.py $^
-
-$(DATA_DIR)/sr_totals.csv: $(DATA_DIR)/sr.db
-	echo "CFSAUID,total" > $@
-	sqlite3 $(DATA_DIR)/sr.db -csv "SELECT location, COUNT(location) from sr where location is not null GROUP BY location" >> $@
 
 
 ##
@@ -64,6 +60,17 @@ $(APP_DIR)/fsas.json: $(DATA_DIR)/fsas.geojson $(DATA_DIR)/population.csv $(DATA
 	 -p Total=+total \
 	 -o $@ \
 	 -- $<
+
+$(DATA_DIR)/sr_totals.csv: $(DATA_DIR)/sr.db
+	echo "CFSAUID,total" > $@
+	sqlite3 $(DATA_DIR)/sr.db -csv "SELECT location, COUNT(location) from sr where location is not null GROUP BY location" >> $@
+
+$(APP_DIR)/all.csv: $(DATA_DIR)/sr.db
+	echo "date,value,lower,upper" > $@
+	sqlite3 $(DATA_DIR)/sr.db -csv "select strftime('%Y-%m',date) || '-01' as _date, count(date),0,0 from sr where location is not null group by _date" >> $@
+	Rscript forecast.R $@ tmp
+	cat tmp >> $@
+	rm tmp
 
 clean:
 	rm -rf $(DATA_DIR)/* $(APP_DIR)/fsas.json

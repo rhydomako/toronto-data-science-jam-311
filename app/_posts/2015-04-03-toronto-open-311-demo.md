@@ -6,6 +6,7 @@ categories:
 ---
 
 <link rel="stylesheet" href="http://cdn.leafletjs.com/leaflet-0.7.3/leaflet.css" />
+<link rel="stylesheet" href="/311/css/metricsgraphics.css" />
 
 <style>
 
@@ -63,11 +64,13 @@ path:hover {
 </style>
 
 <div id="map"></div>
+<div id="timeSeries"></div>
 
 <script src="http://d3js.org/d3.v3.min.js"></script>
 <script src="http://d3js.org/topojson.v1.min.js"></script>
 <script src="http://cdn.leafletjs.com/leaflet-0.7.3/leaflet.js"></script>
 <script src="http://labratrevenge.com/d3-tip/javascripts/d3.tip.v0.6.3.js"></script>
+<script src="/311/js/metricsgraphics.min.js"></script>
 
 <script>
 
@@ -98,7 +101,7 @@ var tip = d3.tip()
 
 svg.call(tip);
 
-d3.json("fsas.json", function(error, fsas) {
+d3.json("/311/fsas.json", function(error, fsas) {
   if (error) return console.error(error);
 
   var transform = d3.geo.transform({point: projectPoint}),
@@ -146,9 +149,32 @@ d3.json("fsas.json", function(error, fsas) {
      var point = map.latLngToLayerPoint(new L.LatLng(y, x));
      this.stream.point(point.x, point.y);
    }
+});
+
+   //
+   // Time series graph
+   //
+d3.csv("/311/all.csv", function(error, data) {
+  if (error) return console.error(error);
+
+  data = MG.convert.date(data, 'date', '%Y-%m-%d');
+  data.forEach(function(d){ d['value'] = +d['value']; });
+
+  MG.data_graphic({
+    data: data,
+    right: 40,
+    left:  90,
+    bottom: 50,
+    width: 1000,
+    height: 300,
+    target: '#timeSeries',
+    x_accessor: 'date',
+    y_accessor: 'value',
+    y_label: 'Number of service requests',
+    show_confidence_band: ['lower', 'upper'],
+  });
 
 });   
-
 
 </script>
 
