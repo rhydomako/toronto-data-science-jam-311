@@ -12,3 +12,5 @@ Directions:
 * Process the data: `make`
 * Build the app-site: `cd app/; jekyll serve`
 * Direct your browser to [http://localhost:4000](http://localhost:4000)
+
+[Example](http://rhydomako.ca/311/)

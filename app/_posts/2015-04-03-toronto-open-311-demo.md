@@ -121,8 +121,9 @@ d3.json("/311/fsas.json", function(error, fsas) {
       .append("path")
       .style("fill", function(d) { return color(d.properties.Total/d.properties.Population); })
       .attr("d", path)
-      .on('mouseover', tip.show);
-    //  .on('mouseout', tip.hide);
+      .on('mouseover', tip.show)
+      .on('mouseout', tip.hide)
+      .on('click', plotTS);
 
   map.on("viewreset", reset);
   reset();
@@ -149,32 +150,39 @@ d3.json("/311/fsas.json", function(error, fsas) {
      var point = map.latLngToLayerPoint(new L.LatLng(y, x));
      this.stream.point(point.x, point.y);
    }
-});
 
-   //
-   // Time series graph
-   //
-d3.csv("/311/all.csv", function(error, data) {
-  if (error) return console.error(error);
+   // Plot the timeseries
+   function plotTS(x) {
 
-  data = MG.convert.date(data, 'date', '%Y-%m-%d');
-  data.forEach(function(d){ d['value'] = +d['value']; });
+    d3.csv("/311/"+x.id+".csv", function(error, data) {
+      if (error) return console.error(error);
 
-  MG.data_graphic({
-    data: data,
-    right: 40,
-    left:  90,
-    bottom: 50,
-    width: 1000,
-    height: 300,
-    target: '#timeSeries',
-    x_accessor: 'date',
-    y_accessor: 'value',
-    y_label: 'Number of service requests',
-    show_confidence_band: ['lower', 'upper'],
-  });
+      data = MG.convert.date(data, 'date', '%Y-%m-%d');
+      data.forEach(function(d){ d['value'] = +d['value']; });
+
+      MG.data_graphic({
+        data: data,
+        right: 40,
+        left:  90,
+        bottom: 50,
+        width: 1000,
+        height: 300,
+        target: '#timeSeries',
+        title: x.id,
+        x_accessor: 'date',
+        y_accessor: 'value',
+        y_label: 'Number of service requests',
+        show_confidence_band: ['lower', 'upper'],
+      });
+     });
+   }
+
+   plotTS({'id':'all'});
 
 });   
 
 </script>
+
+[Source data](http://www1.toronto.ca/wps/portal/contentonly?vgnextoid=3cdebe037654f210VgnVCM1000003dd60f89RCRD&vgnextchannel=1a66e03bb8d1e310VgnVCM10000071d60f89RCRD)
+
 
