@@ -4,8 +4,6 @@ import sys
 import requests
 import time
 
-KEY='AIzaSyCfsYrqB6SoluthyNvFBlZEn4mCOWuMRLE'
-
 
 if __name__=='__main__':
     db    = sys.argv[1]
