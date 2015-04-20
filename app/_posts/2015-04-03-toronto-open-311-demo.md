@@ -56,27 +56,71 @@ path:hover {
   left: 0;
 }
 
-#map {
-  width: 960px;
+#map-container {
+  width: 1200px;
   height: 500px;
+}
+
+#map {
+  display: inline-block;
+  width: 700px;
+  height: 500px;
+}
+
+#types {
+  display: inline-block;
+  width: 400px;
+  height: 500px;
+}
+
+ul{ 
+  width: 400px;
+  height: 500px;
+  overflow:hidden; 
+  overflow-y:scroll;
+}
+
+li:hover{
+  color: #00f;
+}
+::-webkit-scrollbar {
+    -webkit-appearance: none;
+    width: 7px;
+}
+::-webkit-scrollbar-thumb {
+    border-radius: 4px;
+    background-color: rgba(0,0,0,.5);
+    -webkit-box-shadow: 0 0 1px rgba(255,255,255,.5);
+}
+
+.legend {
+  width: 200px;
+  height: 40px;
+}
+#colorLegend .colorlegend-labels {
+  font-size: 9px;
+  fill: #888;
 }
 
 </style>
 
-<div id="map"></div>
+<div id="map-container">
+  <div id="colorLegend" class="legend"></div>
+  <div id="map"></div>
+  <div id="types"></div>
+</div>
+
 <div id="timeSeries"></div>
 
 <script src="http://d3js.org/d3.v3.min.js"></script>
 <script src="http://d3js.org/topojson.v1.min.js"></script>
+<script src="http://d3js.org/queue.v1.min.js"></script>
 <script src="http://cdn.leafletjs.com/leaflet-0.7.3/leaflet.js"></script>
 <script src="http://labratrevenge.com/d3-tip/javascripts/d3.tip.v0.6.3.js"></script>
 <script src="/311/js/metricsgraphics.min.js"></script>
+<script src="/311/js/colorlegend.js"></script>
 
 <script>
-
-var color = d3.scale.threshold()
-    .domain([0, 0.2, 0.4, 0.6, 0.8, 1.0, 1.2, 1.4])
-    .range(["#fff7ec", "#fee8c8", "#fdd49e", "#fdbb84", "#fc8d59", "#ef6548", "#d7301f", "#b30000", "#7f0000"]);
 
 var map = L.map('map').setView([43.708, -79.3703], 11);
 
@@ -87,99 +131,160 @@ L.tileLayer('http://{s}.tiles.mapbox.com/v4/{mapId}/{z}/{x}/{y}.png?access_token
     token: 'pk.eyJ1Ijoicmh5ZG9tYWtvIiwiYSI6IkZXN0k5em8ifQ.-ZW6vi94OM65M4xGlShDjA'
 }).addTo(map);
 
+//
+// D3 code for the svg overlayPane
+//
 var svg = d3.select(map.getPanes().overlayPane).append("svg"),
     g = svg.append("g").attr("class", "leaflet-zoom-hide");
 
+//
+// Colour scale
+//
+var color = d3.scale.linear()
+    .domain([0,1.2])
+    .range(["#fff7ec", "#7f0000"]);
+
+//
+// Tool tip
+//
 var tip = d3.tip()
   .attr('class', 'd3-tip')
   .offset([-5, 0])
   .html(function(d) {
-    return "<strong>Total number of service requests:</strong> <span style='color:red'>" + d.properties.Total + "</span><br> \
+    return "<strong>Total number of service requests:</strong> <span style='color:red'>" + d.properties['All'] + "</span><br> \
             <strong>Population:</strong> <span style='color:red'>" + d.properties.Population + "</span><br> \
-            <strong>Average service requests per resident:</strong> <span style='color:red'>" + (d.properties.Total/d.properties.Population).toFixed(2) + "</span>";
+            <strong>Average service requests per resident:</strong> <span style='color:red'>" + (d.properties.All/d.properties.Population).toFixed(2) + "</span>";
   });
-
 svg.call(tip);
 
-d3.json("/311/fsas.json", function(error, fsas) {
-  if (error) return console.error(error);
+//
+// Load data
+//
+queue()
+    .defer(d3.csv,  "/311/request_types.csv")
+    .defer(d3.json, "/311/fsas.json")
+    .await(initMap);
 
-  var transform = d3.geo.transform({point: projectPoint}),
-    path = d3.geo.path().projection(transform);
+//
+// Make the map
+//
+function initMap(error, request_types, fsas) {
 
-  var labels = g.selectAll('.fsa-label')
-      .data(topojson.feature(fsas, fsas.objects.fsas).features)
-    .enter().append('text')
-      .attr("class", function(d) { return "fsa-label " + d.id; })
-      .attr("transform", function(d) { return "translate(" + path.centroid(d) + ")"; })
-      .attr("dy", ".20em")
-      .text(function(d) { return d.id; });
+    var onFocus = 'All';
 
-  var feature = g.selectAll('path')
-      .data(topojson.feature(fsas, fsas.objects.fsas).features)
-    .enter()
-      .append("path")
-      .style("fill", function(d) { return color(d.properties.Total/d.properties.Population); })
-      .attr("d", path)
-      .on('mouseover', tip.show)
-      .on('mouseout', tip.hide)
-      .on('click', plotTS);
+    fsaFeatures = topojson.feature(fsas, fsas.objects.fsas).features;
 
-  map.on("viewreset", reset);
-  reset();
+    toplist = d3.select("#types").append("ul");
+    toplist.selectAll("li")
+        .data(request_types)
+      .enter()
+        .append("li")
+        .text(function(d){ return d.request_types; })
+        .on("click", function(d) { fillFSAs(d.request_types);  });
 
-  // Reposition the SVG to cover the features.
-  function reset() {
-    var bounds = path.bounds(topojson.feature(fsas, fsas.objects.fsas)),
-        topLeft = bounds[0],
-        bottomRight = bounds[1];
+    var transform = d3.geo.transform({point: projectPoint}),
+      path = d3.geo.path().projection(transform);
 
-    svg .attr("width", bottomRight[0] - topLeft[0])
-        .attr("height", bottomRight[1] - topLeft[1])
-        .style("left", topLeft[0] + "px")
-        .style("top", topLeft[1] + "px");
+    var labels = g.selectAll('.fsa-label')
+        .data(fsaFeatures)
+      .enter().append('text')
+        .attr("class", function(d) { return "fsa-label " + d.id; })
+        .attr("transform", function(d) { return "translate(" + path.centroid(d) + ")"; })
+        .attr("dy", ".20em")
+        .text(function(d) { return d.id; });
 
-    g.attr("transform", "translate(" + -topLeft[0] + "," + -topLeft[1] + ")");
+    var feature = g.selectAll('path')
+        .data(fsaFeatures)
+      .enter()
+        .append("path")
+        .style("fill", function(d) { return color(d.properties['All']/d.properties.Population); })
+        .attr("d", path)
+        .on('mouseover', tip.show)
+        .on('mouseout', tip.hide)
+        .on('click', plotTS);
 
-    feature.attr("d", path);
-    labels.attr("transform", function(d) { return "translate(" + path.centroid(d) + ")"; })
-        .style("font-size", function(d) { return (2*( map.getZoom() - 11) + 12) + "px" });
-   }
+    colorlegend("#colorLegend", color, "linear", {});
 
-   function projectPoint(x, y) {
-     var point = map.latLngToLayerPoint(new L.LatLng(y, x));
-     this.stream.point(point.x, point.y);
-   }
+    function fillFSAs(selected) {
+        onFocus = selected;
 
-   // Plot the timeseries
-   function plotTS(x) {
+        // rescale colours
+        var a = d3.max( fsaFeatures.map( function(d) { return +d.properties[selected]/d.properties.Population; } )); 
+        color.domain([0,a]);
 
-    d3.csv("/311/"+x.id+".csv", function(error, data) {
-      if (error) return console.error(error);
+        g.selectAll('path')
+            .data(fsaFeatures)
+            .style("fill", function(d) { return color(d.properties[selected]/d.properties.Population); });
 
-      data = MG.convert.date(data, 'date', '%Y-%m-%d');
-      data.forEach(function(d){ d['value'] = +d['value']; });
+        tip.html(function(d) {
+            return "<strong>Total number of <span style='color:red'>"+ selected +"</span> requests:</strong> <span style='color:red'>" + d.properties[selected] + "</span><br> \
+            <strong>Population:</strong> <span style='color:red'>" + d.properties.Population + "</span><br> \
+            <strong>Average service requests per resident:</strong> <span style='color:red'>" + (d.properties[selected]/d.properties.Population).toFixed(8) + "</span>";});
 
-      MG.data_graphic({
-        data: data,
-        right: 40,
-        left:  90,
-        bottom: 50,
-        width: 1000,
-        height: 300,
-        target: '#timeSeries',
-        title: x.id,
-        x_accessor: 'date',
-        y_accessor: 'value',
-        y_label: 'Number of service requests',
-        show_confidence_band: ['lower', 'upper'],
-      });
-     });
-   }
+        //reset scale
+        d3.select("#colorLegend").html("")
+        colorlegend("#colorLegend", color, "linear", {});
+    }
 
-   plotTS({'id':'all'});
+    // Reposition the SVG to cover the features.
+    function reset() {
+      var bounds = path.bounds(topojson.feature(fsas, fsas.objects.fsas)),
+          topLeft = bounds[0],
+          bottomRight = bounds[1];
 
-});   
+      svg .attr("width", bottomRight[0] - topLeft[0])
+          .attr("height", bottomRight[1] - topLeft[1])
+          .style("left", topLeft[0] + "px")
+          .style("top", topLeft[1] + "px");
+
+      g.attr("transform", "translate(" + -topLeft[0] + "," + -topLeft[1] + ")");
+
+      feature.attr("d", path);
+      labels.attr("transform", function(d) { return "translate(" + path.centroid(d) + ")"; })
+          .style("font-size", function(d) { return (2*( map.getZoom() - 11) + 12) + "px" });
+    }
+
+    //
+    // Timeseries
+    //
+    function plotTS(x) {
+
+        d3.csv("/311/"+x.id+".csv", function(error, data) {
+            if (error) return console.error(error);
+
+            data = MG.convert.date(data, 'date', '%Y-%m-%d');
+            data.forEach(function(d){ d['value'] = +d['value']; });
+
+            MG.data_graphic({
+              data: data,
+              right: 40,
+              left:  90,
+              bottom: 50,
+              width: 1000,
+              height: 300,
+              target: '#timeSeries',
+              title: x.id,
+              x_accessor: 'date',
+              y_accessor: 'value',
+              y_label: 'Number of service requests',
+              show_confidence_band: ['lower', 'upper'],
+            });
+        });
+    }
+
+    function projectPoint(x, y) {
+      var point = map.latLngToLayerPoint(new L.LatLng(y, x));
+      this.stream.point(point.x, point.y);
+    }
+
+    //
+    // Initialize functions
+    //
+    plotTS({'id':'all'});
+    map.on("viewreset", reset);
+    reset();
+}
+
 
 </script>
 
