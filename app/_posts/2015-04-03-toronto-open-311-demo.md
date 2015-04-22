@@ -94,6 +94,7 @@ li:hover{
 }
 
 .legend {
+  display: inline-block;
   width: 200px;
   height: 40px;
 }
@@ -102,14 +103,26 @@ li:hover{
   fill: #888;
 }
 
+#scaleButtons {
+  width: 300px;
+  display: inline-block;
+}
+
 </style>
 
-<div id="map-container">
+<div id="mapHeader">
   <div id="colorLegend" class="legend"></div>
+  <div id="scaleButtons">
+    <form>
+      <label><input id="normalization" type="radio" name="normalization" value="raw">Raw</input></label>
+      <label><input id="normalization" type="radio" name="normalization" value="per" checked>Per 1000 residents</input></label>
+    </form>
+  </div>
+</div>
+<div id="map-container">
   <div id="map"></div>
   <div id="types"></div>
 </div>
-
 <div id="timeSeries"></div>
 
 <script src="http://d3js.org/d3.v3.min.js"></script>
@@ -141,7 +154,7 @@ var svg = d3.select(map.getPanes().overlayPane).append("svg"),
 // Colour scale
 //
 var color = d3.scale.linear()
-    .domain([0,1.2])
+    .domain([0,1200])
     .range(["#fff7ec", "#7f0000"]);
 
 //
@@ -153,7 +166,7 @@ var tip = d3.tip()
   .html(function(d) {
     return "<strong>Total number of service requests:</strong> <span style='color:red'>" + d.properties['All'] + "</span><br> \
             <strong>Population:</strong> <span style='color:red'>" + d.properties.Population + "</span><br> \
-            <strong>Average service requests per resident:</strong> <span style='color:red'>" + (d.properties.All/d.properties.Population).toFixed(2) + "</span>";
+            <strong>Average service requests per 1000 residents:</strong> <span style='color:red'>" + (d.properties.All/(d.properties.Population/1000.)).toFixed(2) + "</span>";
   });
 svg.call(tip);
 
@@ -169,8 +182,6 @@ queue()
 // Make the map
 //
 function initMap(error, request_types, fsas) {
-
-    var onFocus = 'All';
 
     fsaFeatures = topojson.feature(fsas, fsas.objects.fsas).features;
 
@@ -197,29 +208,39 @@ function initMap(error, request_types, fsas) {
         .data(fsaFeatures)
       .enter()
         .append("path")
-        .style("fill", function(d) { return color(d.properties['All']/d.properties.Population); })
+        .style("fill", function(d) { return color(d.properties['All']/(d.properties.Population/1000.)); })
         .attr("d", path)
         .on('mouseover', tip.show)
         .on('mouseout', tip.hide)
         .on('click', plotTS);
 
-    colorlegend("#colorLegend", color, "linear", {});
+    var normalization = d3.selectAll("#normalization").on("change", radioButton);
+    var saveSelection = 'All';
+    function radioButton() {
+      fillFSAs(saveSelection);
+    }
 
     function fillFSAs(selected) {
-        onFocus = selected;
+        saveSelection = selected;
 
         // rescale colours
-        var a = d3.max( fsaFeatures.map( function(d) { return +d.properties[selected]/d.properties.Population; } )); 
+        var a = d3.max( fsaFeatures.map( function(d) {
+            var norm = normalization[0][0].checked ? 1 : (d.properties.Population/1000.);
+            return +d.properties[selected]/norm; } 
+        )); 
         color.domain([0,a]);
 
         g.selectAll('path')
             .data(fsaFeatures)
-            .style("fill", function(d) { return color(d.properties[selected]/d.properties.Population); });
+            .style("fill", function(d) { 
+               var norm = normalization[0][0].checked ? 1 : (d.properties.Population/1000.);
+               return color(d.properties[selected]/norm); 
+            });
 
         tip.html(function(d) {
             return "<strong>Total number of <span style='color:red'>"+ selected +"</span> requests:</strong> <span style='color:red'>" + d.properties[selected] + "</span><br> \
             <strong>Population:</strong> <span style='color:red'>" + d.properties.Population + "</span><br> \
-            <strong>Average service requests per resident:</strong> <span style='color:red'>" + (d.properties[selected]/d.properties.Population).toFixed(8) + "</span>";});
+            <strong>Average service requests per 1000 residents:</strong> <span style='color:red'>" + (d.properties[selected]/(d.properties.Population/1000.)).toFixed(8) + "</span>";});
 
         //reset scale
         d3.select("#colorLegend").html("")
@@ -280,6 +301,8 @@ function initMap(error, request_types, fsas) {
     //
     // Initialize functions
     //
+    colorlegend("#colorLegend", color, "linear", {});
+
     plotTS({'id':'all'});
     map.on("viewreset", reset);
     reset();
