@@ -176,12 +176,13 @@ svg.call(tip);
 queue()
     .defer(d3.csv,  "/311/request_types.csv")
     .defer(d3.json, "/311/fsas.json")
+    .defer(d3.csv,  "/311/ts.csv")
     .await(initMap);
 
 //
 // Make the map
 //
-function initMap(error, request_types, fsas) {
+function initMap(error, request_types, fsas, ts) {
 
     fsaFeatures = topojson.feature(fsas, fsas.objects.fsas).features;
 
@@ -191,7 +192,7 @@ function initMap(error, request_types, fsas) {
       .enter()
         .append("li")
         .text(function(d){ return d.request_types; })
-        .on("click", function(d) { fillFSAs(d.request_types);  });
+        .on("click", function(d) { fillFSAs(d.request_types); plotTS(d.request_types);  });
 
     var transform = d3.geo.transform({point: projectPoint}),
       path = d3.geo.path().projection(transform);
@@ -211,8 +212,7 @@ function initMap(error, request_types, fsas) {
         .style("fill", function(d) { return color(d.properties['All']/(d.properties.Population/1000.)); })
         .attr("d", path)
         .on('mouseover', tip.show)
-        .on('mouseout', tip.hide)
-        .on('click', plotTS);
+        .on('mouseout', tip.hide);
 
     var normalization = d3.selectAll("#normalization").on("change", radioButton);
     var saveSelection = 'All';
@@ -220,6 +220,9 @@ function initMap(error, request_types, fsas) {
       fillFSAs(saveSelection);
     }
 
+    //
+    // Replot the FSAs and colours
+    //
     function fillFSAs(selected) {
         saveSelection = selected;
 
@@ -270,26 +273,20 @@ function initMap(error, request_types, fsas) {
     //
     function plotTS(x) {
 
-        d3.csv("/311/"+x.id+".csv", function(error, data) {
-            if (error) return console.error(error);
+        ts.forEach(function(d){ d[x] = +d[x]; });
 
-            data = MG.convert.date(data, 'date', '%Y-%m-%d');
-            data.forEach(function(d){ d['value'] = +d['value']; });
-
-            MG.data_graphic({
-              data: data,
+        MG.data_graphic({
+              data: ts,
               right: 40,
               left:  90,
               bottom: 50,
               width: 1000,
               height: 300,
               target: '#timeSeries',
-              title: x.id,
-              x_accessor: 'date',
-              y_accessor: 'value',
+              title: x,
+              x_accessor: '_date',
+              y_accessor: x,
               y_label: 'Number of service requests',
-              show_confidence_band: ['lower', 'upper'],
-            });
         });
     }
 
@@ -303,7 +300,8 @@ function initMap(error, request_types, fsas) {
     //
     colorlegend("#colorLegend", color, "linear", {});
 
-    plotTS({'id':'all'});
+    ts = MG.convert.date(ts, '_date', '%Y-%m-%d');
+    plotTS('All');
     map.on("viewreset", reset);
     reset();
 }
